@@ -243,15 +243,17 @@ type koi struct {
 	v          variety
 	n          int
 	seg, R     float64
-	cx, cy     float64 // centre of the figure-eight
-	ax, ay     float64 // its half-width and half-height
-	omega      float64 // path speed
-	phase      float64
 	s1, s2, s3 float64
-}
 
-func (k *koi) path(s float64) pt {
-	return pt{k.cx + k.ax*math.Sin(s), k.cy + k.ay*math.Sin(2*s)}
+	// steering state (advanced by scene.step)
+	x, y, heading float64
+	baseSpeed     float64
+	speed         float64
+	wf1, wf2      float64 // wander frequencies, different for each fish
+	beat          float64 // tail-beat phase; runs faster when swimming faster
+	tx, ty        float64 // where this koi is heading next
+	trail         []pt    // recent head positions, newest last
+	cur           []pt    // spine for the current frame
 }
 
 // radius: half-width at u (0 = nose, 1 = tail tip)
@@ -269,16 +271,16 @@ func (k *koi) radius(u float64) float64 {
 	}
 }
 
-// spine walks backwards along the path from the head, one segment length
-// at a time, then adds a side-to-side swimming wave.
-func (k *koi) spine(t float64) []pt {
-	s := k.phase + k.omega*t
+// spine walks back along the head's trail, one segment length at a time,
+// then adds a side-to-side swimming wave.
+func (k *koi) spine() []pt {
 	pts := make([]pt, 0, k.n+1)
-	prev := k.path(s)
+	last := len(k.trail) - 1
+	prev := k.trail[last]
 	pts = append(pts, prev)
 	acc := 0.0
-	for ds := 0.004; len(pts) <= k.n; s -= ds {
-		p := k.path(s - ds)
+	for i := last - 1; i >= 0 && len(pts) <= k.n; i-- {
+		p := k.trail[i]
 		acc += math.Hypot(p.x-prev.x, p.y-prev.y)
 		prev = p
 		if acc >= k.seg {
@@ -286,13 +288,18 @@ func (k *koi) spine(t float64) []pt {
 			acc = 0
 		}
 	}
+	bx, by := -math.Cos(k.heading), -math.Sin(k.heading)
+	for len(pts) <= k.n { // trail too short: continue straight back
+		p := pts[len(pts)-1]
+		pts = append(pts, pt{p.x + bx*k.seg, p.y + by*k.seg})
+	}
 	out := make([]pt, len(pts))
 	for i := range pts {
 		a, b := pts[max(0, i-1)], pts[min(len(pts)-1, i+1)]
 		tx, ty := b.x-a.x, b.y-a.y
 		L := math.Hypot(tx, ty) + 1e-9
 		u := float64(i) / float64(k.n)
-		w := (0.1 + 1.1*u*u) * math.Sin(t*7-float64(i)*0.6+k.s2) * k.R / 2.8
+		w := (0.1 + 1.1*u*u) * math.Sin(k.beat-float64(i)*0.6) * k.R / 2.8
 		out[i] = pt{pts[i].x - ty/L*w, pts[i].y + tx/L*w}
 	}
 	return out
@@ -334,8 +341,8 @@ func bbox(pts []pt, pad float64, c *canvas) (int, int, int, int) {
 	return max(0, int(x0-pad)), max(0, int(y0-pad)), min(c.w-1, int(x1+pad)), min(c.h-1, int(y1+pad))
 }
 
-func (k *koi) drawShadow(c *canvas, t float64) {
-	pts := k.spine(t)
+func (k *koi) drawShadow(c *canvas) {
+	pts := k.cur
 	const ox, oy = 2.0, 3.0 // sun from the upper left
 	x0, y0, x1, y1 := bbox(pts, k.R*2+4, c)
 	for y := y0; y <= y1; y++ {
@@ -348,7 +355,7 @@ func (k *koi) drawShadow(c *canvas, t float64) {
 }
 
 func (k *koi) draw(c *canvas, t float64) {
-	pts := k.spine(t)
+	pts := k.cur
 	head, neck := pts[0], pts[2]
 	fx, fy := head.x-neck.x, head.y-neck.y
 	fl := math.Hypot(fx, fy) + 1e-9
@@ -448,32 +455,176 @@ type scene struct {
 	fish []*koi
 	pads []pad
 	seed uint32
+	simT float64
+	sc   float64
+	w, h float64
+	rng  *rand.Rand
 }
 
+const simDT = 1.0 / 60
+
 func newScene(w, h int, r *rand.Rand) *scene {
-	c := newCanvas(w, h)
-	sc := float64(h) / 32
+	sc := math.Min(float64(h)/32, float64(w)/60) // fish size relative to the pond
+	s := &scene{c: newCanvas(w, h), sc: sc, w: float64(w), h: float64(h), rng: rand.New(rand.NewSource(r.Int63()))}
 	perm := r.Perm(len(varieties))
-	ax := math.Max(6, float64(w)/2-7*sc)
-	ay := math.Max(3, float64(h)/2-5*sc)
-	speed := 13 * sc // pixels per second
-	avg := math.Sqrt(ax*ax*0.5 + 4*ay*ay*0.5)
-	var fish []*koi
 	for i := 0; i < 2; i++ {
-		fish = append(fish, &koi{
+		side := float64(i*2 - 1) // start on opposite sides, facing opposite ways
+		k := &koi{
 			v: varieties[perm[i]], n: 18, seg: 1.45 * sc, R: 3.1 * sc,
-			cx: float64(w) / 2, cy: float64(h) / 2, ax: ax, ay: ay,
-			omega: speed / avg, phase: r.Float64()*6.28 + float64(i)*math.Pi,
 			s1: r.Float64() * 6.28, s2: r.Float64() * 6.28, s3: r.Float64() * 6.28,
-		})
+			x:         s.w/2 + side*s.w*0.28,
+			y:         s.h * (0.35 + 0.3*r.Float64()),
+			heading:   math.Pi/2*(1+side) + (r.Float64()-0.5)*0.8,
+			baseSpeed: (7 + 2.5*r.Float64() + 1.5*float64(i)) * sc,
+			wf1:       0.35 + 0.3*r.Float64(),
+			wf2:       0.9 + 0.5*r.Float64(),
+		}
+		k.trail = []pt{{k.x, k.y}}
+		s.fish = append(s.fish, k)
 	}
-	return &scene{c, fish, makePads(w, h, r), r.Uint32()}
+	for i := range s.fish {
+		s.pickTarget(i)
+	}
+	s.pads = makePads(w, h, r)
+	s.seed = r.Uint32()
+	// let them swim for a few seconds first so frame 0 already looks natural
+	s.simT = -4
+	s.advance(0)
+	return s
+}
+
+func wrapAngle(a float64) float64 {
+	return math.Mod(a+3*math.Pi, 2*math.Pi) - math.Pi
+}
+
+// pickTarget chooses a new destination for koi i: somewhere it has to
+// travel to, and as far as possible from the other koi and its destination.
+func (s *scene) pickTarget(i int) {
+	k := s.fish[i]
+	mx, my := k.R*3.5, k.R*2.2
+	best, bx, by := -1e9, s.w/2, s.h/2
+	for c := 0; c < 12; c++ {
+		x := mx + s.rng.Float64()*math.Max(1, s.w-2*mx)
+		y := my + s.rng.Float64()*math.Max(1, s.h-2*my)
+		travel := math.Hypot(x-k.x, y-k.y)
+		score := math.Min(travel, s.w*0.5) // go somewhere, not on the spot
+		for j, o := range s.fish {
+			if j != i {
+				score += 1.5 * math.Min(math.Hypot(x-o.x, y-o.y), math.Hypot(x-o.tx, y-o.ty))
+			}
+		}
+		if score > best {
+			best, bx, by = score, x, y
+		}
+	}
+	k.tx, k.ty = bx, by
+}
+
+// step moves every koi forward by dt: wander, steer away from the pond
+// edges, and steer away from the other koi's bodies.
+func (s *scene) step(dt float64) {
+	T := s.simT
+	for i, k := range s.fish {
+		dx, dy := math.Cos(k.heading), math.Sin(k.heading)
+		look := 9 * s.sc
+		lx, ly := k.x+dx*look, k.y+dy*look
+
+		// walls: push back from whichever edge the look-ahead point nears
+		mx, my := k.R*3, k.R*2
+		var wx, wy float64
+		for _, p := range []pt{{lx, ly}, {k.x, k.y}} {
+			if p.x < mx {
+				wx += (mx - p.x) / mx
+			}
+			if p.x > s.w-mx {
+				wx -= (p.x - (s.w - mx)) / mx
+			}
+			if p.y < my {
+				wy += (my - p.y) / my
+			}
+			if p.y > s.h-my {
+				wy -= (p.y - (s.h - my)) / my
+			}
+		}
+
+		// other koi: steer away from any part of their body that is close
+		var ax, ay, crowd float64
+		D := k.R * 4
+		for j, o := range s.fish {
+			if j == i || o.cur == nil {
+				continue
+			}
+			// their body, plus where their head will be shortly
+			olook := pt{o.x + math.Cos(o.heading)*look, o.y + math.Sin(o.heading)*look}
+			for n := 0; n <= len(o.cur); n += 2 {
+				b := olook
+				if n < len(o.cur) {
+					b = o.cur[n]
+				}
+				for _, p := range []pt{{lx, ly}, {k.x, k.y}} {
+					ex, ey := p.x-b.x, p.y-b.y
+					d := math.Hypot(ex, ey) + 1e-6
+					if d < D {
+						f := (D - d) / D
+						ax += ex / d * f
+						ay += ey / d * f
+						crowd = math.Max(crowd, f)
+					}
+				}
+			}
+		}
+
+		// head for this koi's own destination; pick a new one on arrival
+		gx, gy := k.tx-k.x, k.ty-k.y
+		gd := math.Hypot(gx, gy) + 1e-6
+		if gd < k.R*2.5 {
+			s.pickTarget(i)
+			gx, gy = k.tx-k.x, k.ty-k.y
+			gd = math.Hypot(gx, gy) + 1e-6
+		}
+
+		tx := gx/gd + wx*3 + ax*3.5
+		ty := gy/gd + wy*3 + ay*3.5
+		diff := wrapAngle(math.Atan2(ty, tx) - k.heading)
+		wander := 0.35 * (math.Sin(T*k.wf1+k.s1) + 0.6*math.Sin(T*k.wf2+k.s2))
+		turn := wander + math.Max(-2.5, math.Min(2.5, diff*2.5))
+		turn = math.Max(-2.5, math.Min(2.5, turn))
+		k.heading = wrapAngle(k.heading + turn*dt)
+
+		// glide and burst, slow into turns, hurry away when crowded
+		// the second koi gives way when they meet; the first swims on
+		yield := 1 + 0.4*crowd
+		if i > 0 {
+			yield = 1 - 0.6*crowd
+		}
+		k.speed = k.baseSpeed * (1 + 0.25*math.Sin(T*0.5+k.s3)) * (1 - 0.3*math.Abs(turn)/2.5) * yield
+		k.x += math.Cos(k.heading) * k.speed * dt
+		k.y += math.Sin(k.heading) * k.speed * dt
+		k.beat += dt * (3 + k.speed*0.35/s.sc)
+
+		k.trail = append(k.trail, pt{k.x, k.y})
+		if len(k.trail) > 600 {
+			k.trail = k.trail[len(k.trail)-400:]
+		}
+	}
+	for _, k := range s.fish {
+		k.cur = k.spine()
+	}
+	s.simT += dt
+}
+
+// advance runs the simulation up to time t.
+func (s *scene) advance(t float64) {
+	for s.simT+simDT <= t {
+		s.step(simDT)
+	}
 }
 
 func (s *scene) render(t float64) *canvas {
+	s.advance(t)
 	drawWater(s.c, t, s.seed)
 	for _, f := range s.fish {
-		f.drawShadow(s.c, t)
+		f.drawShadow(s.c)
 	}
 	for _, f := range s.fish {
 		f.draw(s.c, t)
