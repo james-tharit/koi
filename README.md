@@ -1,17 +1,21 @@
-# KOI - In Your Terminal
+# koi — fish in your fish shell
 
-A procedural pixel-art koi pond for your terminal. Two koi circle each other under drifting lily pads on rippling water, drawn fresh every frame from math. There are no sprites or images. It's a single Go binary with no dependencies, made to run as your fish shell greeting.
+A procedural pixel-art koi pond for your terminal greeting. Two koi circle each other under drifting lily pads on rippling water that shifts from pale morning blue to moonlit navy as the day goes on. Every frame is drawn fresh from math — no sprites, no image files, no dependencies, one Go binary.
 
 ![A frame from the pond, enlarged 8×](pond.gif)
 
 ## Install
 
-You need Go 1.24 or newer.
+One line (needs Go 1.24+):
 
 ```fish
-cd koi                         # the folder with main.go and go.mod
-go build -o ~/.local/bin/koi .
-fish_add_path ~/.local/bin     # only if it isn't on your PATH yet
+go install github.com/james-tharit/koi@latest
+```
+
+Then make sure `go install`'s bin directory is on your PATH:
+
+```fish
+fish_add_path (go env GOBIN; or echo (go env GOPATH)/bin)
 ```
 
 Try it:
@@ -19,6 +23,16 @@ Try it:
 ```fish
 koi
 ```
+
+<details>
+<summary>From source instead</summary>
+
+```fish
+git clone https://github.com/james-tharit/koi
+cd koi
+go build -o ~/.local/bin/koi .
+```
+</details>
 
 ## Options
 
