@@ -63,15 +63,9 @@ func mix(a, b rgb, t float64) rgb {
 func (c rgb) mul(f float64) rgb { return rgb{c.r * f, c.g * f, c.b * f} }
 
 var (
-	waterTones = []rgb{hex(0x5577aa), hex(0x5f84b8), hex(0x6a90c4), hex(0x4f6fa0)}
-	causticLo  = hex(0x7ea3d2)
-	causticHi  = hex(0x9dbde3)
-	padDark    = hex(0x16704f)
-	padMid     = hex(0x1f8a5e)
-	padLight   = hex(0x35a571)
-	petal      = hex(0xf2f0d8)
-	pollen     = hex(0xe8d86a)
-	eyeCol     = hex(0x14161c)
+	petal  = hex(0xf2f0d8)
+	pollen = hex(0xe8d86a)
+	eyeCol = hex(0x14161c)
 )
 
 type variety struct {
@@ -137,13 +131,16 @@ func drawWater(c *canvas, t float64, seed uint32) {
 					}
 				}
 			}
-			col := waterTones[int(id*float64(len(waterTones)))%len(waterTones)]
+			col := active.water[int(id*4)%4]
 			edge := (f2 - f1) * cell
 			switch {
 			case edge < 0.5:
-				col = mix(col, causticHi, 0.75)
+				col = mix(col, active.causticHi, 0.75*active.causticAmp)
 			case edge < 1.1:
-				col = mix(col, causticLo, 0.4)
+				col = mix(col, active.causticLo, 0.4*active.causticAmp)
+			}
+			if active.skyGlowAmp > 0 {
+				col = mix(col, active.skyGlowTop, active.skyGlowAmp*(1-float64(y)/float64(c.h)))
 			}
 			c.set(x, y, col)
 		}
@@ -208,18 +205,18 @@ func drawPad(c *canvas, p pad, t float64) {
 			if angDiff(a, p.notch) < 0.32 && d > 0.6 {
 				continue // the wedge cut every lily pad has
 			}
-			col := padMid
+			col := active.padMid
 			light := (-dx - dy) / p.r
 			switch {
 			case d > p.r-1 && light < 0.2:
-				col = padDark
+				col = active.padDark
 			case light > 0.55:
-				col = padLight
+				col = active.padLight
 			}
 			if p.r >= 5 && d > 1.5 && d < p.r-1.2 { // veins
 				for k := 1; k < 6; k++ {
 					if angDiff(a, p.notch+float64(k)*1.05) < 0.35/d {
-						col = padDark
+						col = active.padDark
 					}
 				}
 			}
@@ -627,6 +624,9 @@ func (s *scene) advance(t float64) {
 func (s *scene) render(t float64) *canvas {
 	s.advance(t)
 	drawWater(s.c, t, s.seed)
+	if active.moon {
+		drawMoon(s.c, s.seed)
+	}
 	for _, f := range s.fish {
 		f.drawShadow(s.c)
 	}
@@ -748,7 +748,17 @@ func main() {
 	rows := flag.Int("h", 16, "height in terminal rows")
 	force256 := flag.Bool("256", false, "use 256 colours instead of truecolor")
 	seed := flag.Int64("seed", 0, "fixed random seed")
+	timeOf := flag.String("time", "", "force time of day: morning|afternoon|late-afternoon|early-night|night|late-night")
 	flag.Parse()
+
+	if *timeOf == "" {
+		active = palettes[pickTOD(time.Now().Hour())]
+	} else if t, ok := parseTOD(*timeOf); ok {
+		active = palettes[t]
+	} else {
+		fmt.Fprintf(os.Stderr, "koi: unknown -time %q (want one of: %s)\n", *timeOf, strings.Join(todNames[:], "|"))
+		os.Exit(2)
+	}
 
 	if env := os.Getenv("KOI_SECONDS"); env != "" && !flagSet("s") {
 		if v, err := strconv.ParseFloat(env, 64); err == nil {

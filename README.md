@@ -30,6 +30,7 @@ koi
 | `-h 20` | `16` | Pond height in terminal rows. |
 | `-clear` | off | Erase the pond when the animation ends. |
 | `-seed 5` | random | Use the same pond layout and koi every time. |
+| `-time night` | from clock | Force a time of day: `morning`, `afternoon`, `late-afternoon`, `early-night`, `night`, `late-night`. By default koi reads your system clock, so the pond is pale and pearly in the morning, warm at dusk, dark with a moon reflection after 10pm. |
 | `-256` | auto | Force 256-color output. |
 | `-frame 2` | | Print a single frame at 2 seconds and exit. |
 | `-gif pond.gif` | | Save the animation (`-s` seconds) as a looping GIF, enlarged 4×, and exit. Combine with `-seed`. |
@@ -66,7 +67,7 @@ The finished pixel grid is converted to `▀` characters with ANSI color codes. 
 All the main settings are in `main.go`:
 
 - **`varieties`:** the koi color schemes. Add your own with a base color, a patch color, a highlight color and a patch threshold (higher means fewer patches). Built in: kohaku, orenji, tancho, showa and yamabuki.
-- **`waterTones`, `causticLo`, `causticHi`, `padDark`/`padMid`/`padLight`:** the pond palette.
+- **`palettes` in `palette.go`:** the six time-of-day palettes (water tones, caustic colors + amplitude, sky-glow, lily-pad tones, moon flag). The right one is picked from your clock at startup, or forced with `-time`.
 - **`newScene`:** fish size (`R`, `seg`, `n`), swimming speed and the size of the figure-eight.
 - **`spine`:** `t*7` sets how fast the tail beats.
 - **`makePads`:** how many lily pads there are and how big they get.
