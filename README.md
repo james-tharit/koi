@@ -30,11 +30,17 @@ koi
 | `-h 20` | `16` | Pond height in terminal rows. |
 | `-clear` | off | Erase the pond when the animation ends. |
 | `-seed 5` | random | Use the same pond layout and koi every time. |
-| `-time night` | from clock | Force a time of day: `morning`, `afternoon`, `late-afternoon`, `early-night`, `night`, `late-night`. By default koi reads your system clock, so the pond is pale and pearly in the morning, warm at dusk, dark with a moon reflection after 10pm. |
+| `-time night` | from clock | Force a time of day: `morning`, `afternoon`, `late-afternoon`, `early-night`, `night`, `late-night`. By default koi reads your system clock, so the pond is pale and pearly in the morning, warm at dusk, dark with a moon reflection after 10pm (see below). |
 | `-256` | auto | Force 256-color output. |
 | `-frame 2` | | Print a single frame at 2 seconds and exit. |
 | `-gif pond.gif` | | Save the animation (`-s` seconds) as a looping GIF, enlarged 4×, and exit. Combine with `-seed`. |
 | `-png pond.png` | | Save a frame as a PNG, enlarged 8×, and exit. Combine with `-frame` and `-seed`. |
+
+### Time of day
+
+Water tone, caustic brightness, sky glow, lily-pad shade and the night-time moon reflection all shift with the hour. The six palettes, same seed:
+
+![All six time-of-day palettes side by side](times.gif)
 
 Some examples:
 
