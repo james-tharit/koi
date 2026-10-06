@@ -21,6 +21,7 @@
 //     koi -loop           animate until Ctrl-C
 //     koi -frame 2        print one frame at t=2s
 //     koi -png pond.png   save one frame as a PNG (scaled up 8x)
+//     koi -gif pond.gif   save the animation (-s seconds) as a looping GIF (scaled up 4x)
 //     koi -clear          erase the pond when the animation ends
 //     koi -w 80 -h 18     size in columns and rows (default: $COLUMNS, 16 rows)
 //     koi -256            force 256-colour output (auto when $COLORTERM lacks truecolor)
@@ -33,6 +34,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/color/palette"
+	"image/draw"
+	"image/gif"
 	"image/png"
 	"math"
 	"math/rand"
@@ -681,7 +685,7 @@ func toLines(c *canvas, truecolor bool) []string {
 	return lines
 }
 
-func savePNG(c *canvas, path string, scale int) error {
+func toRGBA(c *canvas, scale int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, c.w*scale, c.h*scale))
 	for y := 0; y < c.h*scale; y++ {
 		for x := 0; x < c.w*scale; x++ {
@@ -689,12 +693,35 @@ func savePNG(c *canvas, path string, scale int) error {
 			img.Set(x, y, color.RGBA{uint8(clamp8(p.r)), uint8(clamp8(p.g)), uint8(clamp8(p.b)), 255})
 		}
 	}
+	return img
+}
+
+func savePNG(c *canvas, path string, scale int) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	return png.Encode(f, img)
+	return png.Encode(f, toRGBA(c, scale))
+}
+
+// saveGIF writes secs seconds of animation at 25fps, looping forever.
+// ponytail: fixed Plan9 palette + dithering, so water is a bit grainy.
+func saveGIF(sc *scene, path string, secs float64, scale int) error {
+	g := &gif.GIF{}
+	for i := 0; float64(i) < secs*25; i++ {
+		src := toRGBA(sc.render(float64(i)/25), scale)
+		dst := image.NewPaletted(src.Bounds(), palette.Plan9)
+		draw.FloydSteinberg.Draw(dst, src.Bounds(), src, image.Point{})
+		g.Image = append(g.Image, dst)
+		g.Delay = append(g.Delay, 4)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return gif.EncodeAll(f, g)
 }
 
 // ------------------------------------------------------------ main
@@ -715,6 +742,7 @@ func main() {
 	loop := flag.Bool("loop", false, "animate until Ctrl-C")
 	frame := flag.Float64("frame", -1, "print one frame at this time and exit")
 	pngOut := flag.String("png", "", "save one frame (at -frame, default 2s) as a PNG and exit")
+	gifOut := flag.String("gif", "", "save the animation (-s seconds) as a GIF and exit")
 	clear := flag.Bool("clear", false, "erase the pond when done")
 	width := flag.Int("w", 0, "width in columns (default $COLUMNS, max 80)")
 	rows := flag.Int("h", 16, "height in terminal rows")
@@ -744,6 +772,13 @@ func main() {
 	}
 	sc := newScene(w, h*2, rand.New(rand.NewSource(sd)))
 
+	if *gifOut != "" {
+		if err := saveGIF(sc, *gifOut, *secs, 4); err != nil {
+			fmt.Fprintln(os.Stderr, "koi:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *pngOut != "" {
 		t := *frame
 		if t < 0 {

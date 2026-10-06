@@ -2,7 +2,7 @@
 
 A procedural pixel-art koi pond for your terminal. Two koi circle each other under drifting lily pads on rippling water, drawn fresh every frame from math. There are no sprites or images. It's a single Go binary with no dependencies, made to run as your fish shell greeting.
 
-![A frame from the pond, enlarged 8×](preview.png)
+![A frame from the pond, enlarged 8×](pond.gif)
 
 ## Install
 
@@ -32,6 +32,7 @@ koi
 | `-seed 5` | random | Use the same pond layout and koi every time. |
 | `-256` | auto | Force 256-color output. |
 | `-frame 2` | | Print a single frame at 2 seconds and exit. |
+| `-gif pond.gif` | | Save the animation (`-s` seconds) as a looping GIF, enlarged 4×, and exit. Combine with `-seed`. |
 | `-png pond.png` | | Save a frame as a PNG, enlarged 8×, and exit. Combine with `-frame` and `-seed`. |
 
 Some examples:
