@@ -34,6 +34,36 @@ go build -o ~/.local/bin/koi .
 ```
 </details>
 
+## Shell greeting
+
+Drop one line into your shell init file and the pond runs every time you open a terminal. koi detects non-TTY output (pipes, scripts, `scp`) and quietly does nothing, so it's safe anywhere.
+
+**fish** — `~/.config/fish/config.fish`:
+
+```fish
+function fish_greeting
+    koi
+end
+```
+
+**zsh** — `~/.zshrc`:
+
+```sh
+koi
+```
+
+**bash** — `~/.bashrc`:
+
+```sh
+koi
+```
+
+**nushell** — `~/.config/nushell/config.nu`:
+
+```nu
+koi
+```
+
 ## Options
 
 | Flag | Default | What it does |
