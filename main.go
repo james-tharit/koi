@@ -744,7 +744,7 @@ func main() {
 	pngOut := flag.String("png", "", "save one frame (at -frame, default 2s) as a PNG and exit")
 	gifOut := flag.String("gif", "", "save the animation (-s seconds) as a GIF and exit")
 	clear := flag.Bool("clear", false, "erase the pond when done")
-	width := flag.Int("w", 0, "width in columns (default $COLUMNS, max 80)")
+	width := flag.Int("w", 0, "width in columns (default: $COLUMNS, min 50)")
 	rows := flag.Int("h", 16, "height in terminal rows")
 	force256 := flag.Bool("256", false, "use 256 colours instead of truecolor")
 	seed := flag.Int64("seed", 0, "fixed random seed")
@@ -770,10 +770,10 @@ func main() {
 
 	w := *width
 	if w == 0 {
-		w, _ = strconv.Atoi(os.Getenv("COLUMNS"))
-		w = min(w-1, 80)
+		cols, _ := strconv.Atoi(os.Getenv("COLUMNS"))
+		w = cols
 	}
-	w = max(30, w)
+	w = max(50, w)
 	h := max(8, *rows)
 
 	sd := *seed
@@ -837,3 +837,4 @@ func main() {
 	}
 	restore()
 }
+

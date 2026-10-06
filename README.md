@@ -26,7 +26,7 @@ koi
 |---|---|---|
 | `-s 8` | `5` | Seconds to animate. You can also set `KOI_SECONDS`. |
 | `-loop` | off | Animate until Ctrl-C, like a screensaver. |
-| `-w 60` | `$COLUMNS`, max 80 | Pond width in columns. |
+| `-w 60` | `$COLUMNS`, min 50 | Pond width in columns. |
 | `-h 20` | `16` | Pond height in terminal rows. |
 | `-clear` | off | Erase the pond when the animation ends. |
 | `-seed 5` | random | Use the same pond layout and koi every time. |
